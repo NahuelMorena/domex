@@ -1,4 +1,6 @@
 import { KeyValuesCount } from '@/types'
+import { getFileProcessor } from './FileProcessorsModule/processors/getFileProcessor'
+import { FileProcessorContext } from './FileProcessorsModule/FileProcessorContext'
 
 /**
  * Sums up the values of a dictionary object.
@@ -53,10 +55,14 @@ export function formatTime(valueNs: number) {
  */
 export async function concatenateFiles(files: File[]) {
   try {
-    const readPromises = files.map((file) => file.text())
-    const contents = await Promise.all(readPromises)
-    const concatenatedContent = contents.join('')
-    return concatenatedContent
+    const readPromises = files.map(async (file) => {
+      const processor = getFileProcessor(file);
+      const context = new FileProcessorContext(processor);
+      return await context.execute(file);
+    });
+  
+    const contents = await Promise.all(readPromises);
+    return contents.join('\n');
   } catch (error) {
     console.error('Error concatenando archivos:', error)
     throw error
