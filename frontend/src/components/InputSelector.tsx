@@ -67,15 +67,19 @@ export default function InputSelector({
     // Check if there are files
     if (!selectedFiles) return
 
-    // Filter files by type and size
-    const files = Array.from(selectedFiles)
-      .filter((file) => FILE_TYPES.includes(file.type))
-      .filter((file) => file.size <= MAX_SIZE)
+    const files = Array.from(selectedFiles) as File[];
+    const filteredFiles = files.filter((file) => {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase() ?? '';
+      return (
+        FILE_TYPES.includes(file.type) ||
+        (file.type === '' && ['arff'].includes(fileExtension))
+      );
+    }).filter((file) => file.size <= MAX_SIZE);
 
     if (isMaster) {
-      addFilesFromMaster(files, id)
+      addFilesFromMaster(filteredFiles, id)
     } else {
-      addFilesFromSlave(files)
+      addFilesFromSlave(filteredFiles)
     }
   }
 
