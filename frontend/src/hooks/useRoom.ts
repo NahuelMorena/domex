@@ -4,7 +4,7 @@ import RoomContext from '@/context/RoomContext'
 import { socket } from '@/socket'
 import { RoomID, UserID } from '@/types'
 import { useRouter } from 'next/navigation'
-import { useCallback, useContext, useEffect } from 'react'
+import { useCallback, useContext, useEffect, useState } from 'react'
 import usePeers from '@/hooks/usePeers'
 import useMapReduce from '@/hooks/useMapReduce'
 
@@ -27,6 +27,23 @@ const useRoom = () => {
   const { destroyPeers } = usePeers()
 
   const { dispatchMapReduce } = useMapReduce()
+
+  const [postulatedNode, setPostulatedNode] = useState<UserID | null> (null);
+  const [isPostulated, setIsPostulated] = useState(false);
+
+  const postulateNode = useCallback((userID: UserID) => {
+    console.log("Emitting room:postulate-node", userID);
+    setPostulatedNode(userID);
+    setIsPostulated(userID === socket.userID)
+    socket.emit("room:postulate-node", userID);
+  }, [])
+
+  const cancelPostulation = useCallback((userID: UserID) => {
+    console.log("Emitting room:cancel-postulation", userID);
+    setPostulatedNode(null);
+    setIsPostulated(false);
+    socket.emit("room:cancel-postulation", userID);
+  }, [])
 
   const joinCluster = useCallback((auth: ClusterAuthProps) => {
     socket.auth = auth
@@ -65,6 +82,12 @@ const useRoom = () => {
     isReadyToExecute,
     setIsReadyToExecute,
     toggleRoomLock,
+    setPostulatedNode,
+    postulatedNode, 
+    postulateNode,
+    cancelPostulation,
+    isPostulated,
+    setIsPostulated
   }
 }
 

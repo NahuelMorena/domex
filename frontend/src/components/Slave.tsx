@@ -40,7 +40,7 @@ const initialFinalResults: FinalResults = {
   sizes: initialSizes,
 }
 
-const editorProps = {
+const initialeditorProps = {
   showLoadFileButton: false,
   codeEditorProps: {
     readOnly: true,
@@ -48,7 +48,7 @@ const editorProps = {
 }
 
 export default function Slave() {
-  const { roomOwner, roomSession, setIsReadyToExecute, isReadyToExecute } = useRoom()
+  const { roomOwner, roomSession, setIsReadyToExecute, isReadyToExecute, setPostulatedNode, postulatedNode, postulateNode, cancelPostulation, isPostulated, setIsPostulated } = useRoom()
 
   const { sendDirectMessage, broadcastMessage } = usePeers()
 
@@ -68,6 +68,8 @@ export default function Slave() {
   const [executing, setExecuting] = useState(false)
 
   const { isReducerNode } = useExecutionStatus({ started, isReadyToExecute })
+  
+  const [editorProps, setEditorProps] = useState(initialeditorProps)
 
   const timesReseted = useRef({
     global: -1,
@@ -402,6 +404,62 @@ export default function Slave() {
     MapReduceJobCode,
   ])
 
+  useEffect(() => {
+      const handlePostulateNode = (userID: UserID) => {
+        console.log(`Nodo ${userID} se ha postulado`);
+        setPostulatedNode(userID);
+        setIsPostulated(userID === socket.userID);
+      };
+  
+      const handleCancelPostulation = () => {
+        console.log("Entro al handleCancel")
+        setPostulatedNode(null);
+        setIsPostulated(false);
+      };
+  
+      socket.on("room:postulate-node", handlePostulateNode);
+      socket.on("room:cancel-postulation", handleCancelPostulation);
+  
+      return () => {
+        socket.off("room:postulate-node", handlePostulateNode);
+        socket.off("room:cancel-postulation", handleCancelPostulation);
+      };
+    }, [socket.userID, setPostulatedNode, setIsPostulated]);
+
+  const setJobApply = useCallback(() =>{
+    console.log("Se oprimio el boton de postular JOB")
+    console.log("postulatedNode: ", postulatedNode)
+    console.log("socket-userID", socket.userID)
+    
+    if (postulatedNode === socket.userID) {
+      //Cancela postulación
+      console.log("Cancela postulación")
+      cancelPostulation(socket.userID)
+      setEditorProps((prevProps) => ({
+        ...prevProps,
+        codeEditorProps: {
+          ...prevProps.codeEditorProps,
+          readOnly: true,
+        },
+      }));
+    } else {
+      //Se postula
+      console.log("Postular Job")
+      postulateNode(socket.userID);
+      setEditorProps((prevProps) => ({
+        ...prevProps,
+        codeEditorProps: {
+          ...prevProps.codeEditorProps,
+          readOnly: false,
+        },
+      }));
+    }
+  }, [postulatedNode, cancelPostulation, postulateNode, socket.userID])
+
+  const startProcessing = useCallback(() => {
+    console.log("Iniciando procesamiento en el nodo postulado...")
+  }, [])
+
   return (
     <main className='flex min-h-screen flex-col items-center p-5'>
       <Navbar title={`Unido al cluster #${roomSession?.roomID}`} />
@@ -453,9 +511,31 @@ export default function Slave() {
               <Button
                 className='w-[220px]'
                 variant='outlined'
+                color={isPostulated ? 'error' : 'success'}
+                onClick={setJobApply}
+                disabled={postulatedNode !== null && postulatedNode !== socket.userID}>
+                {isPostulated
+                  ? 'Cancelar postulación'
+                  : 'Postular Job'}
+              </Button>
+              
+              {isPostulated && (
+                <Button
+                  className="w-[220px]"
+                  variant="outlined"
+                  color="secondary"
+                  onClick={startProcessing}
+                >
+                  Iniciar Procesamiento
+                </Button>
+              )}
+
+              <Button
+                className='w-[220px]'
+                variant='outlined'
                 color={!isReadyToExecute ? 'success' : 'error'}
                 onClick={() => setIsReadyToExecute(!isReadyToExecute)}
-                disabled={!isReady || started}>
+                disabled={!isReady || started || isPostulated}>
                 {isReadyToExecute
                   ? 'Cancelar'
                   : !isReady

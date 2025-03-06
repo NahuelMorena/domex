@@ -7,6 +7,17 @@ export default function registerWebRTC(
   socket: Socket,
   roomsSessionStore: RoomSessionStore,
 ): void {
+  socket.on('room:postulate-node', (userID: string) => {
+    console.log(`Nodo ${userID} se ha postulado en la sala ${socket.roomID}`);
+    socket.to(socket.roomID).emit('room:postulate-node', userID);
+  })
+
+  socket.on('room:cancel-postulation', () => {
+    console.log(`Postulación cancelada en la sala ${socket.roomID}`);
+    socket.to(socket.roomID).emit('room:cancel-postulation');
+  });
+
+
   socket.on('webrtc:sending-signal', ({ userToSignal, signal, callerID }: SendingSignalParams) => {
     io.to(userToSignal).emit('webrtc:user-joined', {
       signal,
