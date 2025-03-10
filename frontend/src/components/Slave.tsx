@@ -28,6 +28,7 @@ import NodeList from '@/components/NodeList'
 import Output from '@/components/Output'
 import Results from '@/components/Results'
 import { FolderList } from '@/components/ui/FolderTree'
+import { toast } from 'sonner'
 
 const initialMapCombineResults: MapCombineResults = {
   mapResults: {},
@@ -69,7 +70,14 @@ export default function Slave() {
 
   const { isReducerNode } = useExecutionStatus({ started, isReadyToExecute })
   
+  const { isValidPythonCode} = usePythonCodeValidator()
   const [editorProps, setEditorProps] = useState(initialeditorProps)
+  const [shouldSendSignal, setShouldSendSignal] = useState(false);
+  const [localCode, setLocalCode] = useState({
+    mapCode: mapReduceState.code.mapCode,
+    combineCode: mapReduceState.code.combineCode,
+    reduceCode: mapReduceState.code.reduceCode,
+  });
 
   const timesReseted = useRef({
     global: -1,
@@ -426,6 +434,14 @@ export default function Slave() {
       };
     }, [socket.userID, setPostulatedNode, setIsPostulated]);
 
+  useEffect(() => {
+    setLocalCode({
+      mapCode: mapReduceState.code.mapCode,
+      combineCode: mapReduceState.code.combineCode,
+      reduceCode: mapReduceState.code.reduceCode,
+    });
+  }, [mapReduceState.code]);
+
   const setJobApply = useCallback(() =>{
     console.log("Se oprimio el boton de postular JOB")
     console.log("postulatedNode: ", postulatedNode)
@@ -434,6 +450,7 @@ export default function Slave() {
     if (postulatedNode === socket.userID) {
       //Cancela postulación
       console.log("Cancela postulación")
+      setIsReadyToExecute(false)
       cancelPostulation(socket.userID)
       setEditorProps((prevProps) => ({
         ...prevProps,
@@ -445,6 +462,7 @@ export default function Slave() {
     } else {
       //Se postula
       console.log("Postular Job")
+      setIsReadyToExecute(true)
       postulateNode(socket.userID);
       setEditorProps((prevProps) => ({
         ...prevProps,
@@ -454,11 +472,49 @@ export default function Slave() {
         },
       }));
     }
-  }, [postulatedNode, cancelPostulation, postulateNode, socket.userID])
+  }, [postulatedNode, cancelPostulation, postulateNode, socket.userID, isReadyToExecute, setIsReadyToExecute])
 
-  const startProcessing = useCallback(() => {
-    console.log("Iniciando procesamiento en el nodo postulado...")
-  }, [])
+  useEffect(() => {
+    if (shouldSendSignal && isReadyToExecute && roomOwner?.userID) {
+      const signal = {
+        type: 'SET_CODES',
+        payload: localCode,
+      }
+
+      socket.emit('webrtc:set-codes', {
+        userToSignal: roomOwner.userID,
+        code: JSON.stringify(signal),
+        callerID: socket.userID,
+      });
+
+      setShouldSendSignal(false);
+    }
+  }, [shouldSendSignal, isReadyToExecute, localCode, roomOwner, socket])
+
+  const startProcessing = useCallback(async() => {
+    const isValidPythonCodePromise = isValidPythonCode(localCode)
+    
+    toast.promise(isValidPythonCodePromise, {
+      position: 'bottom-center',
+      loading: 'Validando la sintáxis del código...',
+      success: () => {
+        return 'Sintáxis del código validada correctamente... iniciando el procesamiento '
+      },
+        error: 'La sintáxis del código no es válida',
+      });
+    
+    if (!(await isValidPythonCodePromise)) return  
+  
+    setShouldSendSignal(true);
+  }, [localCode, isValidPythonCode])
+
+  const handleCodeChange = useCallback(
+    (codeType: 'mapCode' | 'combineCode' | 'reduceCode', newCode: string) => {
+      setLocalCode((prevCode) => ({
+        ...prevCode,
+        [codeType]: newCode,
+      }));
+    }, []);
 
   return (
     <main className='flex min-h-screen flex-col items-center p-5'>
@@ -470,7 +526,9 @@ export default function Slave() {
             <BasicAccordion
               {...editorProps}
               title={placeholdersFunctions.map.title}
-              codeState={[mapReduceState.code.mapCode]}
+              codeState={[localCode.mapCode, (newCode: string) => {
+                handleCodeChange('mapCode', newCode);
+              }]}
               error={mapReduceState.output.stderr.mapCode}
               loading={started && !mapExecuted && !mapCombineExecuted && !mapReduceState.errors}
               finished={mapExecuted || mapCombineExecuted}
@@ -478,7 +536,9 @@ export default function Slave() {
             <BasicAccordion
               {...editorProps}
               title={placeholdersFunctions.combine.title}
-              codeState={[mapReduceState.code.combineCode]}
+              codeState={[localCode.combineCode, (newCode: string) => {
+                handleCodeChange('combineCode', newCode);
+              }]}
               error={mapReduceState.output.stderr.combineCode}
               loading={mapExecuted && !mapCombineExecuted && !mapReduceState.errors}
               finished={mapCombineExecuted}
@@ -486,7 +546,9 @@ export default function Slave() {
             <BasicAccordion
               {...editorProps}
               title={placeholdersFunctions.reduce.title}
-              codeState={[mapReduceState.code.reduceCode]}
+              codeState={[localCode.reduceCode, (newCode: string) => {
+                handleCodeChange('reduceCode', newCode);
+              }]}
               error={mapReduceState.output.stderr.reduceCode}
               loading={mapCombineExecuted && !finished && !mapReduceState.errors}
               finished={finished}
