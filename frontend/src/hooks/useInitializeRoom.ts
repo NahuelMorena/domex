@@ -108,7 +108,6 @@ const useInitializeRoom = () => {
       setClusterUsers((prevUsers) => prevUsers.filter((user) => user.userID !== userID))
       deletePeer(userID)
 
-      socket.emit('node-disconnected')
       toast.info(`${userName} ha abandonado la sala`)
     }
 
