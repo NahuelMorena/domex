@@ -414,6 +414,27 @@ export default function Slave() {
   ])
 
   useEffect(() => {
+    const handleNodeDisconnected = () => {
+      setPostulatedNode(null);
+      setIsPostulated(false);
+      setIsReadyToExecute(false);
+      setEditorProps((prevProps) => ({
+        ...prevProps,
+        codeEditorProps: {
+          ...prevProps.codeEditorProps,
+          readOnly: true,
+        },
+      }));
+    };
+
+    socket.on('receive-node-disconnected', handleNodeDisconnected);
+
+    return () => {
+      socket.off('node-disconnected', handleNodeDisconnected);
+    };
+  }, [postulatedNode, setPostulatedNode, setIsPostulated, setIsReadyToExecute]);
+
+  useEffect(() => {
     const handleClusterUsers = (state: boolean) => {
       setAllUsersReady(state);
     }

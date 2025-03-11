@@ -20,7 +20,7 @@ const useInitializeRoom = () => {
   const router = useRouter()
   const pathname = usePathname()
   const { deletePeer, createPeer, broadcastMessage } = usePeers()
-  const { leaveRoom } = useRoom()
+  const { leaveRoom, postulatedNode } = useRoom()
   const { showConfirmAlert } = useAlertModal()
 
   useEffect(() => {
@@ -108,6 +108,7 @@ const useInitializeRoom = () => {
       setClusterUsers((prevUsers) => prevUsers.filter((user) => user.userID !== userID))
       deletePeer(userID)
 
+      socket.emit('node-disconnected')
       toast.info(`${userName} ha abandonado la sala`)
     }
 
