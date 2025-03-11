@@ -73,6 +73,7 @@ export default function Slave() {
   const { isValidPythonCode} = usePythonCodeValidator()
   const [editorProps, setEditorProps] = useState(initialeditorProps)
   const [shouldSendSignal, setShouldSendSignal] = useState(false);
+  const [allUsersReady, setAllUsersReady] = useState(false); 
   const [localCode, setLocalCode] = useState({
     mapCode: mapReduceState.code.mapCode,
     combineCode: mapReduceState.code.combineCode,
@@ -413,6 +414,18 @@ export default function Slave() {
   ])
 
   useEffect(() => {
+    const handleClusterUsers = (state: boolean) => {
+      setAllUsersReady(state);
+    }
+
+    socket.on('update-user-ready-state', handleClusterUsers);
+
+    return () => {
+      socket.off('update-user-ready-state', handleClusterUsers);
+    };
+  }, []);
+
+  useEffect(() => {
       const handlePostulateNode = (userID: UserID) => {
         console.log(`Nodo ${userID} se ha postulado`);
         setPostulatedNode(userID);
@@ -515,6 +528,12 @@ export default function Slave() {
         [codeType]: newCode,
       }));
     }, []);
+  
+  const processingButtonText = !isReady
+    ? 'Iniciando Python...'
+    : !allUsersReady
+      ? 'Esperando a los nodos'
+      : 'Iniciar procesamiento';
 
   return (
     <main className='flex min-h-screen flex-col items-center p-5'>
@@ -587,8 +606,9 @@ export default function Slave() {
                   variant="outlined"
                   color="secondary"
                   onClick={startProcessing}
+                  disabled={!allUsersReady || !isReady}
                 >
-                  Iniciar Procesamiento
+                  {processingButtonText}
                 </Button>
               )}
 

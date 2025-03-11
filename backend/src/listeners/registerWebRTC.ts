@@ -25,6 +25,11 @@ export default function registerWebRTC(
     })
   })
 
+  socket.on('send-user-ready-state', (state : boolean) => {
+    console.log(`Recibido UPDATE_USER_READY_STATE en la sala ${socket.roomID}`);
+    socket.to(socket.roomID).emit('update-user-ready-state', state);
+  })
+
   socket.on('webrtc:sending-signal', ({ userToSignal, signal, callerID }: SendingSignalParams) => {
     io.to(userToSignal).emit('webrtc:user-joined', {
       signal,

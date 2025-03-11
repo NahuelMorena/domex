@@ -133,6 +133,7 @@ export default function Master() {
     const readyUsers = clusterUsers.filter((user) => user.readyToExecuteMap).length   
     const newAllUsersReady = totalUsers > 0 && totalUsers === readyUsers;
     if (newAllUsersReady !== allUsersReady) {
+      socket.emit("send-user-ready-state", newAllUsersReady);
       setAllUsersReady(newAllUsersReady);
     }
   }, [clusterUsers])
@@ -285,7 +286,6 @@ export default function Master() {
 
     socket.on('webrtc:receive-codes', handleReceiveCodes);
     
-    console.log("Escuchando mensajes en el Master...");
     return () => {
       socket.off('webrtc:receive-codes', handleReceiveCodes);
     }
