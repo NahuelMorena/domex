@@ -1,6 +1,6 @@
 import { type Server, type Socket } from 'socket.io'
 import { type RoomSessionStore } from '../store/RoomSessionStore.js'
-import { UserID, type ReturningSignalParams, type SendingSignalParams, type SetCodesParams } from '../types.js'
+import { type ReturningSignalParams, type SendingSignalParams, type SetCodesParams } from '../types.js'
 
 export default function registerWebRTC(
   io: Server,

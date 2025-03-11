@@ -74,6 +74,7 @@ export default function Slave() {
   const [editorProps, setEditorProps] = useState(initialeditorProps)
   const [shouldSendSignal, setShouldSendSignal] = useState(false);
   const [allUsersReady, setAllUsersReady] = useState(false); 
+  const [isExecutionReadyButtonPressed, setIsExecutionReadyButtonPressed] = useState(false);
   const [localCode, setLocalCode] = useState({
     mapCode: mapReduceState.code.mapCode,
     combineCode: mapReduceState.code.combineCode,
@@ -414,6 +415,23 @@ export default function Slave() {
   ])
 
   useEffect(() => {
+    if (finished) {
+      setIsExecutionReadyButtonPressed(false)
+      if (isPostulated) {
+        cancelPostulation(socket.userID);
+        setIsPostulated(false);
+        setEditorProps((prevProps) => ({
+          ...prevProps,
+          codeEditorProps: {
+            ...prevProps.codeEditorProps,
+            readOnly: true,
+          },
+        }));
+      }
+    }
+  }, [finished, isPostulated, cancelPostulation, socket.userID, setIsPostulated, setIsExecutionReadyButtonPressed])
+
+  useEffect(() => {
     const handleNodeDisconnected = () => {
       setPostulatedNode(null);
       setIsPostulated(false);
@@ -430,7 +448,7 @@ export default function Slave() {
     socket.on('receive-node-disconnected', handleNodeDisconnected);
 
     return () => {
-      socket.off('node-disconnected', handleNodeDisconnected);
+      socket.off('receive-node-disconnected', handleNodeDisconnected);
     };
   }, [postulatedNode, setPostulatedNode, setIsPostulated, setIsReadyToExecute]);
 
@@ -615,7 +633,7 @@ export default function Slave() {
                 variant='outlined'
                 color={isPostulated ? 'error' : 'success'}
                 onClick={setJobApply}
-                disabled={postulatedNode !== null && postulatedNode !== socket.userID}>
+                disabled={postulatedNode !== null && postulatedNode !== socket.userID || isExecutionReadyButtonPressed}>
                 {isPostulated
                   ? 'Cancelar postulación'
                   : 'Postular Job'}
@@ -637,7 +655,10 @@ export default function Slave() {
                 className='w-[220px]'
                 variant='outlined'
                 color={!isReadyToExecute ? 'success' : 'error'}
-                onClick={() => setIsReadyToExecute(!isReadyToExecute)}
+                onClick={() => {
+                  setIsReadyToExecute(!isReadyToExecute);
+                  setIsExecutionReadyButtonPressed(!isReadyToExecute);
+                }}
                 disabled={!isReady || started || isPostulated}>
                 {isReadyToExecute
                   ? 'Cancelar'
