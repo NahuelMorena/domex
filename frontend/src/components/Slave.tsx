@@ -415,27 +415,25 @@ export default function Slave() {
     MapReduceJobCode,
   ])
 
-  useEffect(() => {
-    if (finished) {
-      setIsExecutionReadyButtonPressed(false);
-      setEditorProps(prevProps => ({
-        ...prevProps,
-        codeEditorProps: {
-          ...prevProps.codeEditorProps,
-          readOnly: !isLeader
-        }
-      }))
-    }
-  }, [finished, isLeader])
-
-  useEffect(() => {
+  const updateEditorReadOnly = (readOnly: boolean) => {
     setEditorProps(prev => ({
       ...prev,
       codeEditorProps: {
         ...prev.codeEditorProps,
-        readOnly: !isLeader
+        readOnly
       }
     }));
+  }
+
+  useEffect(() => {
+    if (finished) {
+      setIsExecutionReadyButtonPressed(false);
+      updateEditorReadOnly(!isLeader);
+    }
+  }, [finished, isLeader])
+
+  useEffect(() => {
+    updateEditorReadOnly(!isLeader);
   }, [isLeader])
 
   useEffect(() => {
@@ -447,35 +445,19 @@ export default function Slave() {
   }, [mapReduceState.code]);
 
   const setJobApply = useCallback(async () =>{
-    console.log("Se oprimio el boton de postular JOB")
-    console.log("leaderId: ", leaderId)
-    console.log("socket-userID", socket.userID)
-    
-    if (leaderId && leaderId !== socket.userID) {
-      toast.warning('Ya hay un nodo lider postulado');
-      return;
-    }
+    if (leaderId && leaderId !== socket.userID) return
 
     try {
       if (isLeader) {
         await cancelPostulation();
         setIsReadyToExecute(false);
-        setEditorProps(prev => ({
-          ...prev,
-          codeEditorProps: {...prev.codeEditorProps, readOnly: true}
-        }));
-        toast.info('Postulación cancelada')
+        updateEditorReadOnly(true);
       } else {
         await postulateNode();
         setIsReadyToExecute(true);
-        setEditorProps(prev => ({
-          ...prev,
-          codeEditorProps: {...prev.codeEditorProps, readOnly: false}
-        }));
-        toast.success('Ahora eres el nodo lider');
+        updateEditorReadOnly(false);
       }
     } catch (error) {
-      toast.error('Error al postularse como lider');
       console.error('Postulation error:', error);
     }
   }, [leaderId, isLeader, cancelPostulation, postulateNode, setIsReadyToExecute]);
@@ -483,32 +465,16 @@ export default function Slave() {
   const startProcessing = useCallback(async() => {
     const isValid = await isValidPythonCode(localCode)
     if (!isValid) return;
-
-    console.log("=== DEBUG START ===");
-    console.log("Master ID:", roomOwner?.userID);
-    console.log("Mi ID:", socket.userID);
-    //console.log("Conexiones activas:", Object.keys(peers));
-  
     if (!roomOwner?.userID) {
       toast.error("No se identificó al nodo Master");
       return;
     }
 
-    //if (roomOwner?.userID && localCode) {
-    console.log("Enviando códigos...", localCode);
-    console.log("Valor de socket.userID:", socket.userID)
-    const success = sendDirectMessage(roomOwner.userID, {
+    sendDirectMessage(roomOwner.userID, {
       type: 'SEND_POSTULATED_CODES',
       payload: localCode,
       userID: socket.userID
     });
-
-    if (success) {
-      toast.success('Códigos postulados enviados al Master');
-    } else {
-      toast.error('Error al enviar códigos');
-    }
-    //}
   }, [isValidPythonCode, localCode, roomOwner?.userID, sendDirectMessage])
 
   const handleCodeChange = useCallback(

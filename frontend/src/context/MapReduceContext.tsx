@@ -192,7 +192,7 @@ const initialState: ReducerState = {
   finishedNodes: 0,
   leaderId: null,
   isPostulated: false,
-  rtcConnections: {},
+  //rtcConnections: {},
   allUsersReady: false,
   codeUpdate: false
 }
@@ -397,56 +397,37 @@ const reducer = (state: ReducerState, action: Action) => {
         finishedMapNodes: state.finishedMapNodes + 1,
       }
     case actionTypes.POSTULATE_NODE:
-      console.log("Entro dentro de actionTypes.POSTULATE_NODE")
       if (!action.payload) {
         return {
           ...state,
           leaderId: null,
           isPostulated: false,
-          rtcConnections: Object.fromEntries(
-            Object.entries(state.rtcConnections).filter(([id]) => id !== action.userID)
-          )
         }
       }
       
-      if (state.leaderId) {
-        const currentLeader = state.leaderId;
-        if (action.payload.timestamp <= currentLeader.timestamp) {
-          return state;
-        }
+      if (!state.leaderId || action.payload.timestamp > state.leaderId.timestamp) {
+        return {
+          ...state,
+          leaderId: action.payload,
+          isPostulated: action.payload.id === action.userID
+        };
       }
-
-      return {
-        ...state,
-        leaderId: action.payload,
-        isPostulated: action.isPostulated ?? (action.payload.id === action.userID),
-        rtcConnections: {
-          ...state.rtcConnections,
-          [action.payload.id]: 'connected'
-        }
-      }
+      return state;
     case actionTypes.CANCEL_POSTULATION:
-      console.log("Entro dentro de actionTypes.CANCEL_POSTULATION")
-      if (!state.leaderId || (userID && state.leaderId.id !== userID)) {
-        return state
+      if (state.leaderId?.id === action.userID) {
+        return {
+          ...state,
+          leaderId: null,
+          isPostulated: false
+        };
       }
-
-      return {
-        ...state,
-        leaderId: null,
-        isPostulated: false,
-        rtcConnections: Object.fromEntries(
-          Object.entries(state.rtcConnections).filter(([id]) => id !== state.leaderId?.id)
-        )
-      }
+      return state;
     case actionTypes.USER_READY_STATE:
-      console.log("Entro dentro de actionTypes.USER_READY_STATE")
       return {
         ...state,
         allUsersReady: action.payload,
       }
     case actionTypes.SEND_POSTULATED_CODES:
-      console.log("Entro dentro de actionTypes.SEND_POSTULATED_CODES")
       if (state.code === action.payload) {
         return state;
       }

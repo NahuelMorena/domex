@@ -7,15 +7,11 @@ export const usePostulateNode = () => {
     const { dispatchMapReduce, mapReduceState} = useContext(MapReduceContext);
     const { broadcastMessage } = usePeers();
 
-    const handlePostulate = useCallback(() => {
-        console.log('Intentando postular nodo...')
+    const postulateNode = useCallback(() => {
         const timestamp = Date.now();
         const currentLeader = mapReduceState.leaderId;
 
-        console.log('Lider actual:', currentLeader);
-
         if (!currentLeader || currentLeader.timestamp < timestamp) {
-            console.log('Postulando nuevo lider...')
             const leaderInfo = {
                 id: socket.userID,
                 timestamp: timestamp
@@ -51,10 +47,8 @@ export const usePostulateNode = () => {
     }, [broadcastMessage, dispatchMapReduce, mapReduceState.isPostulated])
 
     return {
-        postulateNode: handlePostulate,
+        postulateNode,
         cancelPostulation,
-        isPostulated: mapReduceState.isPostulated,
         leaderId: mapReduceState.leaderId?.id,
-        canPostulate: !mapReduceState.leaderId || (mapReduceState.leaderId.id === socket.userID)
     };
 };
