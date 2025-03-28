@@ -71,6 +71,30 @@ const useInitializePeers = () => {
             try {
               const decodedData: Action = JSON.parse(completeMessage.toString('utf8'))
 
+              if (decodedData.type === 'POSTULATE_NODE' || decodedData.type === 'CANCEL_POSTULATION') {
+                decodedData.userID = userID;
+                decodedData.userName = clusterUsers.find(user => user.userID === userID)?.userName;
+                dispatchMapReduce(decodedData);
+                return;
+              }
+
+              if (decodedData.type === 'USER_READY_STATE') {
+                dispatchMapReduce({
+                  type: 'USER_READY_STATE',
+                  payload: decodedData.payload,
+                })
+                return
+              }
+
+              if (decodedData.type === 'SEND_POSTULATED_CODES') {
+                dispatchMapReduce({
+                  type: 'SEND_POSTULATED_CODES',
+                  payload: decodedData.payload,
+                  userID: decodedData.userID
+                });
+                return;
+              }
+
               if (decodedData.type === 'FILE_NAME') {
                 const { uuid, name } = decodedData.payload
                 fileNamesRef.current[uuid] = name

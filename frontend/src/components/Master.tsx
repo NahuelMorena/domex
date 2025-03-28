@@ -20,7 +20,6 @@ import { toast } from 'sonner'
 import BasicAccordion from './Accordion'
 import Navbar from './Navbar'
 import NodeList from './NodeList'
-import { socket } from '@/socket'
 
 const WordCountCode = {
   map: `def fmap(value):
@@ -48,7 +47,6 @@ export default function Master() {
   const { clusterUsers, roomSession, toggleRoomLock } = useRoom()
   const { mapReduceState, dispatchMapReduce } = useMapReduce()
   const { sendDirectMessage, broadcastMessage } = usePeers()
-  const [allUsersReady, setAllUsersReady] = useState(false)
   const [finalResults, setFinalResults] = useState<FinalResults>(initialFinalResults)
   const [isLoading, setIsLoading] = useState(false)
   const [finished, setFinished] = useState(false)
@@ -104,7 +102,7 @@ export default function Master() {
 
   const handleIniciarProcesamiento = async () => {
     if (!isReady) return
-    if (!allUsersReady) return
+    if (!mapReduceState.allUsersReady) return
    
     const isValidPythonCodePromise = isValidPythonCode(code)
 
@@ -132,11 +130,18 @@ export default function Master() {
     const totalUsers = clusterUsers.length
     const readyUsers = clusterUsers.filter((user) => user.readyToExecuteMap).length   
     const newAllUsersReady = totalUsers > 0 && totalUsers === readyUsers;
-    if (newAllUsersReady !== allUsersReady) {
-      socket.emit("send-user-ready-state", newAllUsersReady);
-      setAllUsersReady(newAllUsersReady);
+    if (newAllUsersReady !== mapReduceState.allUsersReady) { 
+      broadcastMessage({
+        type: 'USER_READY_STATE',
+        payload: newAllUsersReady,
+      });
+
+      dispatchMapReduce({
+        type: 'USER_READY_STATE',
+        payload: newAllUsersReady
+      });
     }
-  }, [clusterUsers])
+  }, [clusterUsers, broadcastMessage, mapReduceState.allUsersReady, dispatchMapReduce])
 
   useEffect(() => {
     // If all the combine results are in, then we can start the reduce phase. Check if isn´t finished yet
@@ -247,63 +252,31 @@ export default function Master() {
   }, [mapReduceState.sizes, mapReduceState.mapNodesCount])
 
   useEffect(() => {
-    if (allUsersReady) {
+    if (mapReduceState.allUsersReady) {
       broadcastMessage({ type: 'ALL_USERS_READY', payload: true});
     }
-  }, [allUsersReady, broadcastMessage])
+  }, [mapReduceState.allUsersReady, broadcastMessage])
 
   useEffect(() => {
-    const handleReceiveCodes = async ({ code, callerID }: { code: string; callerID: string }) => {
-      try {
-        const parsedSignal = JSON.parse(code);
-        if (parsedSignal.type === 'SET_CODES' && parsedSignal.payload) {
-          if (!parsedSignal.payload.mapCode || !parsedSignal.payload.combineCode || !parsedSignal.payload.reduceCode) {
-            throw new Error("El código recibido está incompleto");
-          }
-
-          const waitForPyodide = async (maxWaitTime = 30000) => {
-            const startTime = Date.now();
-            while (!isReady && Date.now() - startTime < maxWaitTime) {
-              console.log("Esperando a que Pyodide esté listo...");
-              await new Promise((resolve) => setTimeout(resolve, 1000))
-            }
-          };
-          await waitForPyodide();
-
-          setCode({
-            mapCode: parsedSignal.payload.mapCode,
-            combineCode: parsedSignal.payload.combineCode,
-            reduceCode: parsedSignal.payload.reduceCode,
-          });
-        
-          setCodeUpdatedBySlave(true);
-        }
-      } catch (error) {
-        console.error("Error al procesar la señal:", error);
-        toast.error("Error al procesar el código recibido.")
-      }
-    };
-
-    socket.on('webrtc:receive-codes', handleReceiveCodes);
-    
-    return () => {
-      socket.off('webrtc:receive-codes', handleReceiveCodes);
+    if (mapReduceState.codeUpdate) {
+      setCode(mapReduceState.code)
+      setCodeUpdatedBySlave(true);
     }
-  }, [isReady])
+  }, [mapReduceState.code, mapReduceState.codeUpdate])
 
   useEffect(() => {
     if (codeUpdatedBySlave) {
-      if (allUsersReady) {
+      if (mapReduceState.allUsersReady) {
         handleIniciarProcesamiento();
       }
       setCodeUpdatedBySlave(false);
     }
     
-  }, [code, allUsersReady, codeUpdatedBySlave]);
+  }, [code, mapReduceState.allUsersReady, codeUpdatedBySlave]);
 
   const processingButtonText = !isReady
     ? 'Iniciando Python...'
-    : !allUsersReady
+    : !mapReduceState.allUsersReady
       ? 'Esperando a los nodos'
       : 'Iniciar procesamiento'
 
@@ -368,7 +341,7 @@ export default function Master() {
               onClick={handleIniciarProcesamiento}
               loading={loading}
               loadingPosition='center'
-              disabled={!allUsersReady || loading || !isReady}>
+              disabled={!mapReduceState.allUsersReady || loading || !isReady}>
               {processingButtonText}
             </LoadingButton>
 

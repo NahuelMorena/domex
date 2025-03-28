@@ -2,10 +2,9 @@
 
 import { placeholdersFunctions } from '@/constants/functionCodes'
 import useRoom from '@/hooks/useRoom'
-import { Code, KeyValuesCount, Output, ReducerState, Sizes, Tree, UserID } from '@/types'
+import { Code, KeyValuesCount, Output, ReducerState, Sizes, Tree, UserID, LeaderInfo } from '@/types'
 import { average } from '@/utils/helpers'
 import { createContext, useReducer } from 'react'
-
 export type MapReduceContextType = {
   mapReduceState: ReducerState
   dispatchMapReduce: React.Dispatch<Action>
@@ -27,12 +26,17 @@ export const actionTypes = {
   MAP_EXECUTED: 'MAP_EXECUTED',
   RESET_READY_TO_EXECUTE: 'RESET_READY_TO_EXECUTE',
   SET_EXECUTION_STATUS: 'SET_EXECUTION_STATUS',
+  POSTULATE_NODE: 'POSTULATE_NODE',
+  CANCEL_POSTULATION: 'CANCEL_POSTULATION',
+  SEND_POSTULATED_CODES: 'SEND_POSTULATED_CODES',
+  USER_READY_STATE: 'USER_READY_STATE',
 } as const
 
 export type Action = {
   userID?: UserID
   userName?: string
   payloadSize?: number
+  isPostulated?: boolean
 } & (
   | { type: 'SET_CODES'; payload: ReducerState['code'] }
   | {
@@ -97,6 +101,21 @@ export type Action = {
         uuid: string
         name: string
       }
+    }
+  | { 
+      type: 'POSTULATE_NODE'
+      payload: LeaderInfo | null
+      isPostulated?: boolean
+      userID?: UserID
+    }
+  | { type: 'CANCEL_POSTULATION'}
+  | { 
+      type: 'SEND_POSTULATED_CODES'
+      payload: ReducerState['code']
+    }
+  | { 
+      type: 'USER_READY_STATE'
+      payload: boolean
     }
 )
 
@@ -171,6 +190,11 @@ const initialState: ReducerState = {
   resetReadyToExecute: -1,
   totalNodes: 0,
   finishedNodes: 0,
+  leaderId: null,
+  isPostulated: false,
+  rtcConnections: {},
+  allUsersReady: false,
+  codeUpdate: false
 }
 
 const MapReduceContext = createContext<MapReduceContextType>({
@@ -371,6 +395,66 @@ const reducer = (state: ReducerState, action: Action) => {
       return {
         ...state,
         finishedMapNodes: state.finishedMapNodes + 1,
+      }
+    case actionTypes.POSTULATE_NODE:
+      console.log("Entro dentro de actionTypes.POSTULATE_NODE")
+      if (!action.payload) {
+        return {
+          ...state,
+          leaderId: null,
+          isPostulated: false,
+          rtcConnections: Object.fromEntries(
+            Object.entries(state.rtcConnections).filter(([id]) => id !== action.userID)
+          )
+        }
+      }
+      
+      if (state.leaderId) {
+        const currentLeader = state.leaderId;
+        if (action.payload.timestamp <= currentLeader.timestamp) {
+          return state;
+        }
+      }
+
+      return {
+        ...state,
+        leaderId: action.payload,
+        isPostulated: action.isPostulated ?? (action.payload.id === action.userID),
+        rtcConnections: {
+          ...state.rtcConnections,
+          [action.payload.id]: 'connected'
+        }
+      }
+    case actionTypes.CANCEL_POSTULATION:
+      console.log("Entro dentro de actionTypes.CANCEL_POSTULATION")
+      if (!state.leaderId || (userID && state.leaderId.id !== userID)) {
+        return state
+      }
+
+      return {
+        ...state,
+        leaderId: null,
+        isPostulated: false,
+        rtcConnections: Object.fromEntries(
+          Object.entries(state.rtcConnections).filter(([id]) => id !== state.leaderId?.id)
+        )
+      }
+    case actionTypes.USER_READY_STATE:
+      console.log("Entro dentro de actionTypes.USER_READY_STATE")
+      return {
+        ...state,
+        allUsersReady: action.payload,
+      }
+    case actionTypes.SEND_POSTULATED_CODES:
+      console.log("Entro dentro de actionTypes.SEND_POSTULATED_CODES")
+      if (state.code === action.payload) {
+        return state;
+      }
+
+      return {
+        ...state,
+        code: action.payload,
+        codeUpdate: true
       }
     default:
       return state

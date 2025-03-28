@@ -60,7 +60,6 @@ export const registerRoom = async (
         userID: socket.userID,
         userName: socket.userName,
       })
-      socket.broadcast.to(socket.roomID).emit('receive-node-disconnected')
 
     await socket.leave(socket.roomID)
     await socket.leave(socket.userID)

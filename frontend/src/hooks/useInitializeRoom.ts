@@ -20,7 +20,7 @@ const useInitializeRoom = () => {
   const router = useRouter()
   const pathname = usePathname()
   const { deletePeer, createPeer, broadcastMessage } = usePeers()
-  const { leaveRoom, postulatedNode } = useRoom()
+  const { leaveRoom } = useRoom()
   const { showConfirmAlert } = useAlertModal()
 
   useEffect(() => {

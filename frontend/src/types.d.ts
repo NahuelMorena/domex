@@ -47,6 +47,11 @@ export type Output = {
   stdout: string
 }
 
+export type LeaderInfo = {
+  id: string
+  timestamp: number
+}
+
 export type ReducerState = {
   code: Code
   combineResults: UserResults
@@ -84,6 +89,14 @@ export type ReducerState = {
   resetReadyToExecute: int
   totalNodes: int
   finishedNodes: int
+  leaderId: LeaderInfo | null
+  isPostulated: boolean
+  rtcConnections: Record<UserID, {
+    connection: RTCPeerConnection
+    channel: RTCDataChannel
+  }>
+  allUsersReady: boolean
+  codeUpdate: boolean
 }
 
 export type KeyValuesCount = {

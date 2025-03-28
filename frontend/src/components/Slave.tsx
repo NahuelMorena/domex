@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { FinalResults, KeyValue, KeyValues, MapCombineResults, Sizes, UserID } from '@/types'
+import { FinalResults, KeyValue, KeyValues, MapCombineResults, Sizes, User, UserID } from '@/types'
 
 import { placeholdersFunctions } from '@/constants/functionCodes'
 
@@ -29,6 +29,7 @@ import Output from '@/components/Output'
 import Results from '@/components/Results'
 import { FolderList } from '@/components/ui/FolderTree'
 import { toast } from 'sonner'
+import { usePostulateNode } from '@/hooks/usePostulateNode'
 
 const initialMapCombineResults: MapCombineResults = {
   mapResults: {},
@@ -49,8 +50,8 @@ const initialeditorProps = {
 }
 
 export default function Slave() {
-  const { roomOwner, roomSession, setIsReadyToExecute, isReadyToExecute, setPostulatedNode, postulatedNode, postulateNode, cancelPostulation, isPostulated, setIsPostulated } = useRoom()
-
+  const { roomOwner, roomSession, setIsReadyToExecute, isReadyToExecute} = useRoom()
+  const { postulateNode, cancelPostulation, leaderId } = usePostulateNode()
   const { sendDirectMessage, broadcastMessage } = usePeers()
 
   const { mapReduceState, MapReduceJobCode } = useMapReduce()
@@ -72,8 +73,6 @@ export default function Slave() {
   
   const { isValidPythonCode} = usePythonCodeValidator()
   const [editorProps, setEditorProps] = useState(initialeditorProps)
-  const [shouldSendSignal, setShouldSendSignal] = useState(false);
-  const [allUsersReady, setAllUsersReady] = useState(false); 
   const [isExecutionReadyButtonPressed, setIsExecutionReadyButtonPressed] = useState(false);
   const [localCode, setLocalCode] = useState({
     mapCode: mapReduceState.code.mapCode,
@@ -87,6 +86,8 @@ export default function Slave() {
   })
 
   const executionStopped = useRef(false)
+
+  const isLeader = leaderId === socket.userID;
 
   const mapExecuted = !!mapReduceState.finishedMapNodes
 
@@ -416,75 +417,26 @@ export default function Slave() {
 
   useEffect(() => {
     if (finished) {
-      setIsExecutionReadyButtonPressed(false)
-      if (isPostulated) {
-        cancelPostulation(socket.userID);
-        setIsPostulated(false);
-        setEditorProps((prevProps) => ({
-          ...prevProps,
-          codeEditorProps: {
-            ...prevProps.codeEditorProps,
-            readOnly: true,
-          },
-        }));
-      }
-    }
-  }, [finished, isPostulated, cancelPostulation, socket.userID, setIsPostulated, setIsExecutionReadyButtonPressed])
-
-  useEffect(() => {
-    const handleNodeDisconnected = () => {
-      setPostulatedNode(null);
-      setIsPostulated(false);
-      setIsReadyToExecute(false);
-      setEditorProps((prevProps) => ({
+      setIsExecutionReadyButtonPressed(false);
+      setEditorProps(prevProps => ({
         ...prevProps,
         codeEditorProps: {
           ...prevProps.codeEditorProps,
-          readOnly: true,
-        },
-      }));
-    };
-
-    socket.on('receive-node-disconnected', handleNodeDisconnected);
-
-    return () => {
-      socket.off('receive-node-disconnected', handleNodeDisconnected);
-    };
-  }, [postulatedNode, setPostulatedNode, setIsPostulated, setIsReadyToExecute]);
-
-  useEffect(() => {
-    const handleClusterUsers = (state: boolean) => {
-      setAllUsersReady(state);
+          readOnly: !isLeader
+        }
+      }))
     }
-
-    socket.on('update-user-ready-state', handleClusterUsers);
-
-    return () => {
-      socket.off('update-user-ready-state', handleClusterUsers);
-    };
-  }, []);
+  }, [finished, isLeader])
 
   useEffect(() => {
-      const handlePostulateNode = (userID: UserID) => {
-        console.log(`Nodo ${userID} se ha postulado`);
-        setPostulatedNode(userID);
-        setIsPostulated(userID === socket.userID);
-      };
-  
-      const handleCancelPostulation = () => {
-        console.log("Entro al handleCancel")
-        setPostulatedNode(null);
-        setIsPostulated(false);
-      };
-  
-      socket.on("room:postulate-node", handlePostulateNode);
-      socket.on("room:cancel-postulation", handleCancelPostulation);
-  
-      return () => {
-        socket.off("room:postulate-node", handlePostulateNode);
-        socket.off("room:cancel-postulation", handleCancelPostulation);
-      };
-    }, [socket.userID, setPostulatedNode, setIsPostulated]);
+    setEditorProps(prev => ({
+      ...prev,
+      codeEditorProps: {
+        ...prev.codeEditorProps,
+        readOnly: !isLeader
+      }
+    }));
+  }, [isLeader])
 
   useEffect(() => {
     setLocalCode({
@@ -494,71 +446,70 @@ export default function Slave() {
     });
   }, [mapReduceState.code]);
 
-  const setJobApply = useCallback(() =>{
+  const setJobApply = useCallback(async () =>{
     console.log("Se oprimio el boton de postular JOB")
-    console.log("postulatedNode: ", postulatedNode)
+    console.log("leaderId: ", leaderId)
     console.log("socket-userID", socket.userID)
     
-    if (postulatedNode === socket.userID) {
-      //Cancela postulación
-      console.log("Cancela postulación")
-      setIsReadyToExecute(false)
-      cancelPostulation(socket.userID)
-      setEditorProps((prevProps) => ({
-        ...prevProps,
-        codeEditorProps: {
-          ...prevProps.codeEditorProps,
-          readOnly: true,
-        },
-      }));
-    } else {
-      //Se postula
-      console.log("Postular Job")
-      setIsReadyToExecute(true)
-      postulateNode(socket.userID);
-      setEditorProps((prevProps) => ({
-        ...prevProps,
-        codeEditorProps: {
-          ...prevProps.codeEditorProps,
-          readOnly: false,
-        },
-      }));
+    if (leaderId && leaderId !== socket.userID) {
+      toast.warning('Ya hay un nodo lider postulado');
+      return;
     }
-  }, [postulatedNode, cancelPostulation, postulateNode, socket.userID, isReadyToExecute, setIsReadyToExecute])
 
-  useEffect(() => {
-    if (shouldSendSignal && isReadyToExecute && roomOwner?.userID) {
-      const signal = {
-        type: 'SET_CODES',
-        payload: localCode,
+    try {
+      if (isLeader) {
+        await cancelPostulation();
+        setIsReadyToExecute(false);
+        setEditorProps(prev => ({
+          ...prev,
+          codeEditorProps: {...prev.codeEditorProps, readOnly: true}
+        }));
+        toast.info('Postulación cancelada')
+      } else {
+        await postulateNode();
+        setIsReadyToExecute(true);
+        setEditorProps(prev => ({
+          ...prev,
+          codeEditorProps: {...prev.codeEditorProps, readOnly: false}
+        }));
+        toast.success('Ahora eres el nodo lider');
       }
-
-      socket.emit('webrtc:set-codes', {
-        userToSignal: roomOwner.userID,
-        code: JSON.stringify(signal),
-        callerID: socket.userID,
-      });
-
-      setShouldSendSignal(false);
+    } catch (error) {
+      toast.error('Error al postularse como lider');
+      console.error('Postulation error:', error);
     }
-  }, [shouldSendSignal, isReadyToExecute, localCode, roomOwner, socket])
-
-  const startProcessing = useCallback(async() => {
-    const isValidPythonCodePromise = isValidPythonCode(localCode)
-    
-    toast.promise(isValidPythonCodePromise, {
-      position: 'bottom-center',
-      loading: 'Validando la sintáxis del código...',
-      success: () => {
-        return 'Sintáxis del código validada correctamente... iniciando el procesamiento '
-      },
-        error: 'La sintáxis del código no es válida',
-      });
-    
-    if (!(await isValidPythonCodePromise)) return  
+  }, [leaderId, isLeader, cancelPostulation, postulateNode, setIsReadyToExecute]);
   
-    setShouldSendSignal(true);
-  }, [localCode, isValidPythonCode])
+  const startProcessing = useCallback(async() => {
+    const isValid = await isValidPythonCode(localCode)
+    if (!isValid) return;
+
+    console.log("=== DEBUG START ===");
+    console.log("Master ID:", roomOwner?.userID);
+    console.log("Mi ID:", socket.userID);
+    //console.log("Conexiones activas:", Object.keys(peers));
+  
+    if (!roomOwner?.userID) {
+      toast.error("No se identificó al nodo Master");
+      return;
+    }
+
+    //if (roomOwner?.userID && localCode) {
+    console.log("Enviando códigos...", localCode);
+    console.log("Valor de socket.userID:", socket.userID)
+    const success = sendDirectMessage(roomOwner.userID, {
+      type: 'SEND_POSTULATED_CODES',
+      payload: localCode,
+      userID: socket.userID
+    });
+
+    if (success) {
+      toast.success('Códigos postulados enviados al Master');
+    } else {
+      toast.error('Error al enviar códigos');
+    }
+    //}
+  }, [isValidPythonCode, localCode, roomOwner?.userID, sendDirectMessage])
 
   const handleCodeChange = useCallback(
     (codeType: 'mapCode' | 'combineCode' | 'reduceCode', newCode: string) => {
@@ -570,7 +521,7 @@ export default function Slave() {
   
   const processingButtonText = !isReady
     ? 'Iniciando Python...'
-    : !allUsersReady
+    : !mapReduceState.allUsersReady
       ? 'Esperando a los nodos'
       : 'Iniciar procesamiento';
 
@@ -631,21 +582,28 @@ export default function Slave() {
               <Button
                 className='w-[220px]'
                 variant='outlined'
-                color={isPostulated ? 'error' : 'success'}
+                color={isLeader ? 'error' : leaderId ? 'secondary' : 'success'}
                 onClick={setJobApply}
-                disabled={postulatedNode !== null && postulatedNode !== socket.userID || isExecutionReadyButtonPressed}>
-                {isPostulated
+                disabled={
+                  (leaderId && leaderId !== socket.userID) || 
+                  isExecutionReadyButtonPressed ||
+                  executing
+                }
+              >
+                {isLeader
                   ? 'Cancelar postulación'
-                  : 'Postular Job'}
+                  : leaderId
+                    ? 'Postulación ocupada'
+                    : 'Postular Job'}
               </Button>
               
-              {isPostulated && (
+              {isLeader && (
                 <Button
                   className="w-[220px]"
                   variant="outlined"
                   color="secondary"
                   onClick={startProcessing}
-                  disabled={!allUsersReady || !isReady}
+                  disabled={!mapReduceState.allUsersReady || !isReady}
                 >
                   {processingButtonText}
                 </Button>
@@ -659,7 +617,7 @@ export default function Slave() {
                   setIsReadyToExecute(!isReadyToExecute);
                   setIsExecutionReadyButtonPressed(!isReadyToExecute);
                 }}
-                disabled={!isReady || started || isPostulated}>
+                disabled={!isReady || started || isLeader}>
                 {isReadyToExecute
                   ? 'Cancelar'
                   : !isReady
