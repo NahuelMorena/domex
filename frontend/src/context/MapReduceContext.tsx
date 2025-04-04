@@ -192,7 +192,6 @@ const initialState: ReducerState = {
   finishedNodes: 0,
   leaderId: null,
   isPostulated: false,
-  //rtcConnections: {},
   allUsersReady: false,
   codeUpdate: false
 }

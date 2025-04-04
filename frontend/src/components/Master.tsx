@@ -13,7 +13,7 @@ import usePeers from '@/hooks/usePeers'
 import { usePythonCodeValidator } from '@/hooks/usePythonCodeValidator'
 import useRoom from '@/hooks/useRoom'
 import useStatistics from '@/hooks/useStatisticts'
-import { FinalResults, KeyValuesCount, ReducerState, Tree, UserID, UserResults } from '@/types'
+import { FinalResults, KeyValuesCount, ReducerState, Tree, User, UserID, UserResults } from '@/types'
 import { LoadingButton } from '@mui/lab'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -131,17 +131,20 @@ export default function Master() {
     const readyUsers = clusterUsers.filter((user) => user.readyToExecuteMap).length   
     const newAllUsersReady = totalUsers > 0 && totalUsers === readyUsers;
     if (newAllUsersReady !== mapReduceState.allUsersReady) { 
-      broadcastMessage({
-        type: 'USER_READY_STATE',
-        payload: newAllUsersReady,
-      });
-
+      if (mapReduceState.leaderId) {
+        const leaderId = mapReduceState.leaderId.id as UserID;
+        sendDirectMessage(leaderId, {
+          type: 'USER_READY_STATE',
+          payload: newAllUsersReady,
+        });
+      }
+      
       dispatchMapReduce({
         type: 'USER_READY_STATE',
         payload: newAllUsersReady
       });
     }
-  }, [clusterUsers, broadcastMessage, mapReduceState.allUsersReady, dispatchMapReduce])
+  }, [clusterUsers, broadcastMessage, mapReduceState.leaderId?.id, mapReduceState.allUsersReady, dispatchMapReduce])
 
   useEffect(() => {
     // If all the combine results are in, then we can start the reduce phase. Check if isn´t finished yet

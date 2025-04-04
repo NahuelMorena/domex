@@ -91,12 +91,6 @@ export type ReducerState = {
   finishedNodes: int
   leaderId: LeaderInfo | null
   isPostulated: boolean
-  /*
-  rtcConnections: Record<UserID, {
-    connection: RTCPeerConnection
-    channel: RTCDataChannel
-  }>
-    */
   allUsersReady: boolean
   codeUpdate: boolean
 }
