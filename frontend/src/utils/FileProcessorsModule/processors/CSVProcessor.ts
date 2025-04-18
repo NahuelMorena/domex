@@ -13,20 +13,23 @@ export class CSVProcessor extends FileProcessor {
                     }
 
                     const rows = content.split("\n").map(row => row.trim());
-
-                    const data = rows.slice(1).map(row => {
-                        return row.split(delimiter).map(value => value.trim());
-                    });
-
-                    const plainText = data.map(row => row.join(' ')).join('\n');
-                    resolve(plainText);
+                    const result = this.processData(rows, delimiter);
+                    resolve(result);
                 } catch (error: unknown) {
                     this.handleError(error, reject, 'Error al procesar CSV');
                 }
             };
+
             reader.onerror = (error) => this.handleError(error, reject, 'Error al leer archivo CSV');
             reader.readAsText(file);
         });
+    }
+
+    private processData(rows: string[], delimiter: string): string {
+        const data = rows.slice(1).map(row => {
+            return row.split(delimiter).map(value => value.trim());
+        });
+        return data.map(row => row.join(' ')).join('\n');
     }
 
     /**
