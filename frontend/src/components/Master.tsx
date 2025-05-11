@@ -13,7 +13,7 @@ import usePeers from '@/hooks/usePeers'
 import { usePythonCodeValidator } from '@/hooks/usePythonCodeValidator'
 import useRoom from '@/hooks/useRoom'
 import useStatistics from '@/hooks/useStatisticts'
-import { FinalResults, KeyValuesCount, ReducerState, Tree, UserID, UserResults } from '@/types'
+import { FinalResults, KeyValuesCount, ReducerState, Tree, User, UserID, UserResults } from '@/types'
 import { LoadingButton } from '@mui/lab'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -47,7 +47,6 @@ export default function Master() {
   const { clusterUsers, roomSession, toggleRoomLock } = useRoom()
   const { mapReduceState, dispatchMapReduce } = useMapReduce()
   const { sendDirectMessage, broadcastMessage } = usePeers()
-  const [allUsersReady, setAllUsersReady] = useState(false)
   const [finalResults, setFinalResults] = useState<FinalResults>(initialFinalResults)
   const [isLoading, setIsLoading] = useState(false)
   const [finished, setFinished] = useState(false)
@@ -60,7 +59,7 @@ export default function Master() {
     combineCode: WordCountCode.combine,
     reduceCode: WordCountCode.reduce,
   })
-
+  const [codeUpdatedBySlave, setCodeUpdatedBySlave] = useState(false);
   const statistics = useStatistics(finalResults)
 
   const { isValidPythonCode, isReady } = usePythonCodeValidator()
@@ -103,8 +102,8 @@ export default function Master() {
 
   const handleIniciarProcesamiento = async () => {
     if (!isReady) return
-    if (!allUsersReady) return
-
+    if (!mapReduceState.allUsersReady) return
+   
     const isValidPythonCodePromise = isValidPythonCode(code)
 
     toast.promise(isValidPythonCodePromise, {
@@ -124,13 +123,28 @@ export default function Master() {
     broadcastMessage(action)
     dispatchMapReduce(action)
     setIsLoading(true)
+    console.log("Termino todo correctamente")
   }
 
   useEffect(() => {
     const totalUsers = clusterUsers.length
-    const readyUsers = clusterUsers.filter((user) => user.readyToExecuteMap).length
-    setAllUsersReady(totalUsers > 0 && totalUsers === readyUsers)
-  }, [clusterUsers])
+    const readyUsers = clusterUsers.filter((user) => user.readyToExecuteMap).length   
+    const newAllUsersReady = totalUsers > 0 && totalUsers === readyUsers;
+    if (newAllUsersReady !== mapReduceState.allUsersReady) { 
+      if (mapReduceState.leaderId) {
+        const leaderId = mapReduceState.leaderId.id as UserID;
+        sendDirectMessage(leaderId, {
+          type: 'USER_READY_STATE',
+          payload: newAllUsersReady,
+        });
+      }
+      
+      dispatchMapReduce({
+        type: 'USER_READY_STATE',
+        payload: newAllUsersReady
+      });
+    }
+  }, [clusterUsers, broadcastMessage, mapReduceState.leaderId?.id, mapReduceState.allUsersReady, dispatchMapReduce])
 
   useEffect(() => {
     // If all the combine results are in, then we can start the reduce phase. Check if isn´t finished yet
@@ -240,9 +254,32 @@ export default function Master() {
     }))
   }, [mapReduceState.sizes, mapReduceState.mapNodesCount])
 
+  useEffect(() => {
+    if (mapReduceState.allUsersReady) {
+      broadcastMessage({ type: 'ALL_USERS_READY', payload: true});
+    }
+  }, [mapReduceState.allUsersReady, broadcastMessage])
+
+  useEffect(() => {
+    if (mapReduceState.codeUpdate) {
+      setCode(mapReduceState.code)
+      setCodeUpdatedBySlave(true);
+    }
+  }, [mapReduceState.code, mapReduceState.codeUpdate])
+
+  useEffect(() => {
+    if (codeUpdatedBySlave) {
+      if (mapReduceState.allUsersReady) {
+        handleIniciarProcesamiento();
+      }
+      setCodeUpdatedBySlave(false);
+    }
+    
+  }, [code, mapReduceState.allUsersReady, codeUpdatedBySlave]);
+
   const processingButtonText = !isReady
     ? 'Iniciando Python...'
-    : !allUsersReady
+    : !mapReduceState.allUsersReady
       ? 'Esperando a los nodos'
       : 'Iniciar procesamiento'
 
@@ -307,7 +344,7 @@ export default function Master() {
               onClick={handleIniciarProcesamiento}
               loading={loading}
               loadingPosition='center'
-              disabled={!allUsersReady || loading || !isReady}>
+              disabled={!mapReduceState.allUsersReady || loading || !isReady}>
               {processingButtonText}
             </LoadingButton>
 

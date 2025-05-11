@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { FinalResults, KeyValue, KeyValues, MapCombineResults, Sizes, UserID } from '@/types'
+import { FinalResults, KeyValue, KeyValues, MapCombineResults, Sizes, User, UserID } from '@/types'
 
 import { placeholdersFunctions } from '@/constants/functionCodes'
 
@@ -28,6 +28,8 @@ import NodeList from '@/components/NodeList'
 import Output from '@/components/Output'
 import Results from '@/components/Results'
 import { FolderList } from '@/components/ui/FolderTree'
+import { toast } from 'sonner'
+import { usePostulateNode } from '@/hooks/usePostulateNode'
 
 const initialMapCombineResults: MapCombineResults = {
   mapResults: {},
@@ -40,7 +42,7 @@ const initialFinalResults: FinalResults = {
   sizes: initialSizes,
 }
 
-const editorProps = {
+const initialeditorProps = {
   showLoadFileButton: false,
   codeEditorProps: {
     readOnly: true,
@@ -48,8 +50,8 @@ const editorProps = {
 }
 
 export default function Slave() {
-  const { roomOwner, roomSession, setIsReadyToExecute, isReadyToExecute } = useRoom()
-
+  const { roomOwner, roomSession, setIsReadyToExecute, isReadyToExecute} = useRoom()
+  const { postulateNode, cancelPostulation, leaderId } = usePostulateNode()
   const { sendDirectMessage, broadcastMessage } = usePeers()
 
   const { mapReduceState, MapReduceJobCode } = useMapReduce()
@@ -68,6 +70,15 @@ export default function Slave() {
   const [executing, setExecuting] = useState(false)
 
   const { isReducerNode } = useExecutionStatus({ started, isReadyToExecute })
+  
+  const { isValidPythonCode} = usePythonCodeValidator()
+  const [editorProps, setEditorProps] = useState(initialeditorProps)
+  const [isExecutionReadyButtonPressed, setIsExecutionReadyButtonPressed] = useState(false);
+  const [localCode, setLocalCode] = useState({
+    mapCode: mapReduceState.code.mapCode,
+    combineCode: mapReduceState.code.combineCode,
+    reduceCode: mapReduceState.code.reduceCode,
+  });
 
   const timesReseted = useRef({
     global: -1,
@@ -75,6 +86,8 @@ export default function Slave() {
   })
 
   const executionStopped = useRef(false)
+
+  const isLeader = leaderId === socket.userID;
 
   const mapExecuted = !!mapReduceState.finishedMapNodes
 
@@ -402,6 +415,82 @@ export default function Slave() {
     MapReduceJobCode,
   ])
 
+  const updateEditorReadOnly = (readOnly: boolean) => {
+    setEditorProps(prev => ({
+      ...prev,
+      codeEditorProps: {
+        ...prev.codeEditorProps,
+        readOnly
+      }
+    }));
+  }
+
+  useEffect(() => {
+    if (finished) {
+      setIsExecutionReadyButtonPressed(false);
+      updateEditorReadOnly(!isLeader);
+    }
+  }, [finished, isLeader])
+
+  useEffect(() => {
+    updateEditorReadOnly(!isLeader);
+  }, [isLeader])
+
+  useEffect(() => {
+    setLocalCode({
+      mapCode: mapReduceState.code.mapCode,
+      combineCode: mapReduceState.code.combineCode,
+      reduceCode: mapReduceState.code.reduceCode,
+    });
+  }, [mapReduceState.code]);
+
+  const setJobApply = useCallback(async () =>{
+    if (leaderId && leaderId !== socket.userID) return
+
+    try {
+      if (isLeader) {
+        await cancelPostulation();
+        setIsReadyToExecute(false);
+        updateEditorReadOnly(true);
+      } else {
+        await postulateNode();
+        setIsReadyToExecute(true);
+        updateEditorReadOnly(false);
+      }
+    } catch (error) {
+      console.error('Postulation error:', error);
+    }
+  }, [leaderId, isLeader, cancelPostulation, postulateNode, setIsReadyToExecute]);
+  
+  const startProcessing = useCallback(async() => {
+    const isValid = await isValidPythonCode(localCode)
+    if (!isValid) return;
+    if (!roomOwner?.userID) {
+      toast.error("No se identificó al nodo Master");
+      return;
+    }
+
+    sendDirectMessage(roomOwner.userID, {
+      type: 'SEND_POSTULATED_CODES',
+      payload: localCode,
+      userID: socket.userID
+    });
+  }, [isValidPythonCode, localCode, roomOwner?.userID, sendDirectMessage])
+
+  const handleCodeChange = useCallback(
+    (codeType: 'mapCode' | 'combineCode' | 'reduceCode', newCode: string) => {
+      setLocalCode((prevCode) => ({
+        ...prevCode,
+        [codeType]: newCode,
+      }));
+    }, []);
+  
+  const processingButtonText = !isReady
+    ? 'Iniciando Python...'
+    : !mapReduceState.allUsersReady
+      ? 'Esperando a los nodos'
+      : 'Iniciar procesamiento';
+
   return (
     <main className='flex min-h-screen flex-col items-center p-5'>
       <Navbar title={`Unido al cluster #${roomSession?.roomID}`} />
@@ -412,7 +501,9 @@ export default function Slave() {
             <BasicAccordion
               {...editorProps}
               title={placeholdersFunctions.map.title}
-              codeState={[mapReduceState.code.mapCode]}
+              codeState={[localCode.mapCode, (newCode: string) => {
+                handleCodeChange('mapCode', newCode);
+              }]}
               error={mapReduceState.output.stderr.mapCode}
               loading={started && !mapExecuted && !mapCombineExecuted && !mapReduceState.errors}
               finished={mapExecuted || mapCombineExecuted}
@@ -420,7 +511,9 @@ export default function Slave() {
             <BasicAccordion
               {...editorProps}
               title={placeholdersFunctions.combine.title}
-              codeState={[mapReduceState.code.combineCode]}
+              codeState={[localCode.combineCode, (newCode: string) => {
+                handleCodeChange('combineCode', newCode);
+              }]}
               error={mapReduceState.output.stderr.combineCode}
               loading={mapExecuted && !mapCombineExecuted && !mapReduceState.errors}
               finished={mapCombineExecuted}
@@ -428,7 +521,9 @@ export default function Slave() {
             <BasicAccordion
               {...editorProps}
               title={placeholdersFunctions.reduce.title}
-              codeState={[mapReduceState.code.reduceCode]}
+              codeState={[localCode.reduceCode, (newCode: string) => {
+                handleCodeChange('reduceCode', newCode);
+              }]}
               error={mapReduceState.output.stderr.reduceCode}
               loading={mapCombineExecuted && !finished && !mapReduceState.errors}
               finished={finished}
@@ -453,9 +548,42 @@ export default function Slave() {
               <Button
                 className='w-[220px]'
                 variant='outlined'
+                color={isLeader ? 'error' : leaderId ? 'secondary' : 'success'}
+                onClick={setJobApply}
+                disabled={
+                  (leaderId && leaderId !== socket.userID) || 
+                  isExecutionReadyButtonPressed ||
+                  executing
+                }
+              >
+                {isLeader
+                  ? 'Cancelar postulación'
+                  : leaderId
+                    ? 'Postulación ocupada'
+                    : 'Postular Job'}
+              </Button>
+              
+              {isLeader && (
+                <Button
+                  className="w-[220px]"
+                  variant="outlined"
+                  color="secondary"
+                  onClick={startProcessing}
+                  disabled={!mapReduceState.allUsersReady || !isReady}
+                >
+                  {processingButtonText}
+                </Button>
+              )}
+
+              <Button
+                className='w-[220px]'
+                variant='outlined'
                 color={!isReadyToExecute ? 'success' : 'error'}
-                onClick={() => setIsReadyToExecute(!isReadyToExecute)}
-                disabled={!isReady || started}>
+                onClick={() => {
+                  setIsReadyToExecute(!isReadyToExecute);
+                  setIsExecutionReadyButtonPressed(!isReadyToExecute);
+                }}
+                disabled={!isReady || started || isLeader}>
                 {isReadyToExecute
                   ? 'Cancelar'
                   : !isReady

@@ -28,3 +28,9 @@ export type ReturningSignalParams = {
 export type SendingSignalParams = ReturningSignalParams & {
   userToSignal: UserID
 }
+
+export type SetCodesParams = {
+  userToSignal: UserID;
+  code: string;
+  callerID: string;
+}

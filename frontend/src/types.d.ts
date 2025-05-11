@@ -47,6 +47,11 @@ export type Output = {
   stdout: string
 }
 
+export type LeaderInfo = {
+  id: string
+  timestamp: number
+}
+
 export type ReducerState = {
   code: Code
   combineResults: UserResults
@@ -84,6 +89,10 @@ export type ReducerState = {
   resetReadyToExecute: int
   totalNodes: int
   finishedNodes: int
+  leaderId: LeaderInfo | null
+  isPostulated: boolean
+  allUsersReady: boolean
+  codeUpdate: boolean
 }
 
 export type KeyValuesCount = {

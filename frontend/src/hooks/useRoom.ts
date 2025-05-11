@@ -4,7 +4,7 @@ import RoomContext from '@/context/RoomContext'
 import { socket } from '@/socket'
 import { RoomID, UserID } from '@/types'
 import { useRouter } from 'next/navigation'
-import { useCallback, useContext, useEffect } from 'react'
+import { useCallback, useContext, useState } from 'react'
 import usePeers from '@/hooks/usePeers'
 import useMapReduce from '@/hooks/useMapReduce'
 
@@ -64,7 +64,7 @@ const useRoom = () => {
     roomOwner,
     isReadyToExecute,
     setIsReadyToExecute,
-    toggleRoomLock,
+    toggleRoomLock, 
   }
 }
 
